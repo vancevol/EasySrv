@@ -1,57 +1,105 @@
 <template>
-  <a-card title="其它" class="settings-card">
-    <a-row type="flex"  align="middle" class="settings-card-row">
-      <a-col :span="24" style="display:flex;align-items: center">
-        <span>文本编辑器：</span>
-        <a-input v-model:value="textEditor" style="flex: 1"></a-input>
-        <a-button @click="clickTextEditor" style="margin-left: 5px">...</a-button>
-      </a-col>
-    </a-row>
-  </a-card>
-  <a-card title="环境变量" class="settings-card">
-    <a-row type="flex"  align="middle" class="settings-card-row">
-      <a-col :span="24">
-        <span>启用环境变量：</span>
-        <a-switch v-model:checked="enableEnv" @change="changeEnableEnv" />
-        <span style="margin-left: 20px;color: red">* 开关此项，需要重启终端后才能生效</span>
-      </a-col>
-    </a-row>
-    <a-row type="flex" justify="space-around" align="middle" class="settings-card-row">
-      <a-col :span="12" style="display: flex;align-items: center">
-        <span :class="!enableEnv?'disabled-text':''">PHP-CLI版本：</span>
-        <a-select style="width: 120px" :options="phpVersionList" :disabled="!enableEnv"
-                  v-model:value="phpCliVersion" @change="phpCliVersionChange" />
-      </a-col>
-      <a-col :span="12" style="display: flex;align-items: center">
-        <span :class="!enableEnv?'disabled-text':''">启用Composer：</span>
-        <a-switch v-model:checked="enableComposer" @change="changeEnableComposer"
-                  :disabled="!enableEnv || phpCliVersion===''" />
-      </a-col>
-    </a-row>
-  </a-card>
-  <a-card title="电脑的用户密码" class="settings-card">
-    <a-row type="flex"  align="middle" class="settings-card-row">
-      <a-col :span="12">
-        <a-input-password v-model:value="userPwd"  readonly />
-      </a-col>
-      <a-col :span="10" :offset="1">
-        <a-button type="primary" @click="resetUserPwd">重设</a-button>
-      </a-col>
-    </a-row>
-  </a-card>
-  <user-pwd-modal v-model:show="userPwdModalShow"  v-model:right-pwd="userPwd" />
+  <div class="content-container">
+    <a-card title="一键启动和停止" class="settings-card">
+      <a-row type="flex"  align="middle" class="settings-card-row">
+        <a-col :span="24" style="display:flex;align-items: center">
+          <span>服务列表：</span>
+          <a-select
+              v-model:value="oneClickServerList"
+              :options="oneClickServerOptions"
+              @change="oneClickServerChange"
+              mode="multiple"
+              placeholder="请选择"
+              style="width: 500px"
+          ></a-select>
+        </a-col>
+      </a-row>
+    </a-card>
+    <a-card title="其它" class="settings-card">
+      <a-row type="flex"  align="middle" class="settings-card-row">
+        <a-col :span="24" style="display:flex;align-items: center">
+          <span>文本编辑器：</span>
+          <a-input v-model:value="textEditor" readonly style="flex: 1"></a-input>
+          <a-button @click="clickTextEditor" style="margin-left: 5px">...</a-button>
+        </a-col>
+      </a-row>
+    </a-card>
+    <a-card title="环境变量" class="settings-card">
+      <a-row type="flex"  align="middle" class="settings-card-row">
+        <a-col :span="24">
+          <span>启用环境变量：</span>
+          <a-switch v-model:checked="enableEnv" @change="changeEnableEnv" />
+          <span style="margin-left: 20px;color: red">* 开关此项，需要重启终端后才能生效</span>
+        </a-col>
+      </a-row>
+      <a-row type="flex" justify="space-around" align="middle" class="settings-card-row">
+        <a-col :span="12" style="display: flex;align-items: center">
+          <span :class="!enableEnv?'disabled-text':''">PHP-CLI版本：</span>
+          <a-select style="width: 120px" :options="phpVersionList" :disabled="!enableEnv"
+                    v-model:value="phpCliVersion" @change="phpCliVersionChange" />
+        </a-col>
+        <a-col :span="12" style="display: flex;align-items: center">
+          <span :class="!enableEnv?'disabled-text':''">启用Composer：</span>
+          <a-switch v-model:checked="enableComposer" @change="changeEnableComposer"
+                    :disabled="!enableEnv || phpCliVersion===''" />
+        </a-col>
+      </a-row>
+    </a-card>
+    <a-card title="电脑的用户密码" class="settings-card" v-if="!isWindows">
+      <a-row type="flex"  align="middle" class="settings-card-row">
+        <a-col :span="12">
+          <a-input-password v-model:value="userPwd"  readonly />
+        </a-col>
+        <a-col :span="10" :offset="1">
+          <a-button type="primary" @click="resetUserPwd">重设</a-button>
+        </a-col>
+      </a-row>
+    </a-card>
+    <user-pwd-modal v-model:show="userPwdModalShow"  v-model:right-pwd="userPwd" />
+  </div>
 </template>
 
 <script setup>
 import {ref} from "vue";
 import {message} from 'ant-design-vue';
-import Env from "@/main/core/Env";
+import Env from "@/main/core/Env/Env";
 import MessageBox from "@/renderer/utils/MessageBox";
 import SoftwareExtend from "@/main/core/software/SoftwareExtend";
 import Settings from "@/main/Settings";
 import GetPath from "@/shared/utils/GetPath";
 import FileDialog from "@/renderer/utils/FileDialog";
 import UserPwdModal from "@/renderer/components/UserPwdModal";
+import OS from "@/main/core/OS";
+import {useMainStore} from "@/renderer/store";
+import {storeToRefs} from "pinia";
+import Software from "@/main/core/software/Software";
+
+const isWindows = ref(OS.isWindows());
+
+const oneClickServerOptions = ref([]);
+const oneClickServerList = ref(Settings.get('OneClickServerList'));
+const mainStore = useMainStore();
+const {serverSoftwareList} = storeToRefs(mainStore);
+//把PHP-FPM-X.X 过滤掉
+let serverList = serverSoftwareList.value.filter(item => Software.IsInstalled(item) && item.Type === 'Server');
+oneClickServerOptions.value = serverList.map(item => {
+  let name = item.Name;
+  let obj = {value: name, name};
+  if (name === 'Nginx') {
+    obj.disabled = true;
+  }
+  return obj;
+});
+oneClickServerOptions.value.unshift({label: 'PHP-FPM', value: 'PHP-FPM'});
+const oneClickServerChange = (val)=>{
+  let originVal = ref(Settings.get('OneClickServerList'));
+  try {
+    Settings.set('OneClickServerList', val);
+  } catch (error) {
+    MessageBox.error(error.message ?? error, '设置出错！');
+    oneClickServerList.value = originVal;
+  }
+}
 
 const textEditor = ref(Settings.get('TextEditor'));
 
@@ -99,9 +147,9 @@ const phpCliVersionChange = () => {
   try {
     if (val) {
       let path = GetPath.getPhpBinPath(val);
-      Env.createBinLink(path, 'php')
+      Env.createBinFile(path, 'php')
     } else {
-      Env.deleteBinLink('php')
+      Env.deleteBinFile('php')
     }
     Settings.set('PhpVersion', val);
     message.info('设置成功，已生效，不需要重启终端！')
@@ -118,9 +166,9 @@ const changeEnableComposer = async () => {
   try {
     if (val) {
       let path = GetPath.getComposerBinPath();
-      Env.createBinLink(path, 'composer')
+      Env.createBinFile(path, 'composer')
     } else {
-      Env.deleteBinLink('composer')
+      Env.deleteBinFile('composer')
     }
     Settings.set('EnableComposer', val);
     message.info('设置成功，已生效，不需要重启终端！')

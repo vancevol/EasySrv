@@ -4,13 +4,31 @@
       <div class="quick-card-content">
 <!--        <a-button type="primary">一键启动</a-button>-->
 <!--        <a-button type="primary">命令行终端</a-button>-->
+        <a-tooltip>
+          <template #title>在设置中选择服务列表</template>
+          <a-button type="primary" @click="oneClickStart" :disabled="serverTableLoading">一键启动</a-button>
+        </a-tooltip>
+
+        <a-tooltip>
+          <template #title>在设置中选择服务列表</template>
+          <a-button type="primary" @click="oneClickStop" :disabled="serverTableLoading">一键停止</a-button>
+        </a-tooltip>
+
+
+
         <a-button type="primary" @click="corePathClick">{{APP_NAME}}目录</a-button>
         <a-button type="primary" @click="wwwPathClick">网站目录</a-button>
       </div>
     </a-card>
 
-    <a-table :columns="columns" :data-source="serverList" class="content-table" :pagination="false" size="middle">
+    <a-table :columns="columns" :data-source="serverList" class="content-table" :pagination="false" size="middle"
+    :loading="serverTableLoading" :scroll="{y: 'calc(100vh - 240px)'}">
       <template #bodyCell="{ column, record}">
+        <template v-if="column.dataIndex === 'name'">
+          <div>
+            {{ record.ServerName ? record.ServerName : record.Name }}
+          </div>
+        </template>
         <template v-if="column.dataIndex === 'status'">
           <div style="font-size: 20px;">
             <right-square-filled style="color: red;" v-show="!record.isRunning"/>
@@ -24,14 +42,33 @@
         </template>
         <template v-if="column.dataIndex === 'operate'">
           <div class="operate-td">
-            <a-button type="primary" @click="startServerClick(record)" v-show="!record.isRunning">启动</a-button>
-            <a-button type="primary" @click="stopServerClick(record)" v-show="record.isRunning">停止</a-button>
-            <a-button type="primary" @click="restartServerClick(record)">重启</a-button>
+            <a-button type="primary" @click="startServerClick(record)" v-show="!record.isRunning"
+                      :loading="record.btnLoading">
+              <template #icon>
+                <PoweroffOutlined/>
+              </template>
+              启动
+            </a-button>
+            <a-button type="primary" @click="stopServerClick(record)" v-show="record.isRunning"
+                      :loading="record.btnLoading">
+              <template #icon><PoweroffOutlined/></template>
+              停止
+            </a-button>
+            <a-button  type="primary" @click="restartServerClick(record)"
+                       :loading="record.btnLoading" :disabled="!record.isRunning">
+              <template #icon><ReloadOutlined /></template>
+              重启
+            </a-button>
             <a-dropdown :trigger="['click']">
               <template #overlay>
                 <a-menu >
-                  <a-menu-item @click="openInstallPath(record)">打开所在目录</a-menu-item>
-                  <a-menu-item v-if="record.ServerConfPath" @click="openConfFile(record)">打开配置文件</a-menu-item>
+                  <a-menu-item @click="openInstallDir(record)">打开所在目录</a-menu-item>
+                  <a-menu-item v-if="record.ConfPath" @click="openConfFile(record)">
+                    打开{{ Path.GetBaseName(record.ConfPath) }}
+                  </a-menu-item>
+                  <a-menu-item v-if="record.ServerConfPath" @click="openServerConfFile(record)">
+                    打开{{ Path.GetBaseName(record.ServerConfPath) }}
+                  </a-menu-item>
                   <a-menu-item v-for="(item,i) in record.ExtraFiles" :key="i" @click="openExtraFile(record,item)">
                     打开{{item.Name}}
                   </a-menu-item>
@@ -46,23 +83,15 @@
         </template>
       </template>
     </a-table>
-
-    <a-card title="服务运行日志" class="log-card">
-      下个版本开放！！！
-<!--      <div>-->
-<!--        2022-06-04 15:39:57 [Nginx] 启动成功<br>-->
-<!--        2022-06-04 19:39:57 [Nginx] 关闭成功-->
-<!--      </div>-->
-    </a-card>
   </div>
   <user-pwd-modal v-model:show="userPwdModalShow" :cancel-is-exit="true" />
 </template>
 
 <script setup>
 // eslint-disable-next-line no-unused-vars
-import {ref, watch} from 'vue';
+import {inject, ref, watch} from 'vue';
 import {useMainStore} from '@/renderer/store'
-import {DownOutlined, RightSquareFilled} from '@ant-design/icons-vue';
+import {DownOutlined, RightSquareFilled,PoweroffOutlined,ReloadOutlined} from '@ant-design/icons-vue';
 import { message } from 'ant-design-vue';
 import App from "@/main/App";
 import GetPath from "@/shared/utils/GetPath";
@@ -77,17 +106,25 @@ import Path from "@/main/utils/Path";
 import ProcessExtend from "@/main/core/ProcessExtend";
 import UserPwdModal from "@/renderer/components/UserPwdModal";
 import SettingsExtend from "@/main/core/SettingsExtend";
+import OS from "@/main/core/OS";
+import Settings from "@/main/Settings";
+import SoftwareExtend from "@/main/core/software/SoftwareExtend";
 
 const userPwdModalShow = ref(false);
-if (!SettingsExtend.isUserPwdSet()) {
-  userPwdModalShow.value = true;
+if(OS.isMacOS()){
+  if (!SettingsExtend.isUserPwdSet()) {
+    userPwdModalShow.value = true;
+  }
 }
+
+const serverTableLoading = ref(false);
+const globalSpinning = inject('globalSpinning')
 
 const columns = [
   {
     title: '服务名',
     width: 180,
-    dataIndex: 'Name',
+    dataIndex: 'name',
   }, {
     title: '状态',
     dataIndex: 'status',
@@ -106,15 +143,19 @@ const {serverSoftwareList} = storeToRefs(mainStore);
 let serverList = serverSoftwareList.value.filter(item => Software.IsInstalled(item));
 
 const refreshServerStatus = async () => {
+  serverTableLoading.value = true;
   let processList = await ProcessExtend.getList({directory: GetPath.getSoftwarePath()});
   let pathList = processList.map(item => item.path);
   for (const item of serverList) {
-    let processPath = Software.getServerProcessPath(item);
-    item.isRunning = pathList.includes(processPath);
+    let serverProcessPath = Software.getServerProcessPath(item);
+    item.isRunning = pathList.includes(serverProcessPath);
   }
+  serverTableLoading.value = false;
 };
 
-refreshServerStatus();
+if (!globalSpinning.value) {
+  refreshServerStatus();
+}
 
 const serviceChange = ()=>{
   message.info('下个版本开放！！！');
@@ -127,11 +168,15 @@ const wwwPathClick = ()=>{
   Native.openPath(GetPath.getWebsitePath());
 }
 
-const openInstallPath = (item) => {
+const openInstallDir = (item) => {
   Native.openPath(Software.getPath(item));
 }
 
 const openConfFile = (item) => {
+  Native.openTextFile(Software.getConfPath(item));
+}
+
+const openServerConfFile = (item) => {
   Native.openTextFile(Software.getServerConfPath(item));
 }
 
@@ -139,9 +184,49 @@ const openExtraFile = (item, extraFile) => {
   Native.openTextFile(Path.Join(Software.getPath(item), extraFile.Path));
 }
 
+const getNginxRequirePhpList = async () => {
+  const list = await SoftwareExtend.getNginxRequirePhpList();
+  return list.map(item => `PHP-${item}`);
+}
+
+const oneClickStart = async () => {
+  const oneClickServerList = ref(Settings.get('OneClickServerList'));
+  //oneClickServerIncludePhpFpm 基本上默认为true
+  const oneClickServerIncludePhpFpm = oneClickServerList.value.includes('PHP-FPM');
+  const requirePhpList = await getNginxRequirePhpList();
+  serverList.forEach(async (item) => {
+    if (oneClickServerList.value.includes(item.Name)) {
+      startServerClick(item);
+    } else if (item.Name.match(/^PHP-[.\d]+$/) && requirePhpList.includes(item.Name) && oneClickServerIncludePhpFpm) {
+      startServerClick(item);
+    }
+  })
+}
+
+const oneClickStop = async () => {
+  const oneClickServerList = ref(Settings.get('OneClickServerList'));
+  //oneClickServerIncludePhpFpm 基本上默认为true
+  const oneClickServerIncludePhpFpm = oneClickServerList.value.includes('PHP-FPM');
+  const requirePhpList = await getNginxRequirePhpList();
+  serverList.forEach(async (item) => {
+    if (oneClickServerList.value.includes(item.Name)) {
+      stopServerClick(item);
+    } else if (item.Name.match(/^PHP-[.\d]+$/) && requirePhpList.includes(item.Name) && oneClickServerIncludePhpFpm) {
+      stopServerClick(item);
+    }
+  })
+}
+
 const startServerClick = async (item) => {
+  if (item.isRunning) {
+    return;
+  }
+  item.btnLoading = true;
   try {
-    //todo 开始前loading，开始后sleep 1-3s
+    if (item.Name === 'Nginx') {
+      await ServerControl.killWebServer();
+    }
+
     await ServerControl.start(item);
     if (!item.unwatch) {
       item.unwatch = watch(() => item.errMsg, (errMsg) => {
@@ -153,29 +238,37 @@ const startServerClick = async (item) => {
   } catch (error) {
     MessageBox.error(error.message ?? error, '启动服务出错！');
   }
+  item.btnLoading = false;
 }
 
 const restartServerClick = async (item) => {
+  item.btnLoading = true;
   try {
-    //todo 开始前loading，开始后sleep 1-3s
     await ServerControl.stop(item);
     if (item.isRunning) {
-      MessageBox.error('服务没有成功停止！', '重启服务出错！');
-      return;
+      throw new Error('服务没有成功停止！');
     }
     await ServerControl.start(item);
   } catch (error) {
     MessageBox.error(error.message ?? error, '重启服务出错！');
   }
+  item.btnLoading = false;
 }
 
 const stopServerClick = async (item) => {
+  if (!item.isRunning) {
+    return;
+  }
+  item.btnLoading = true;
   try {
     await ServerControl.stop(item);
-    await refreshServerStatus();
+    if (item.isRunning) {
+      await refreshServerStatus();
+    }
   } catch (error) {
-    MessageBox.error(error.message ?? error, '启动服务出错！');
+    MessageBox.error(error.message ?? error, '停止服务出错！');
   }
+  item.btnLoading = false;
 }
 
 </script>

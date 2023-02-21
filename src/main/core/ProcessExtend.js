@@ -4,21 +4,40 @@ import OS from "@/main/core/OS";
 export default class ProcessExtend {
     /**
      *
+     * @param pid {number}
+     * @returns {Promise<*>}
+     */
+    static async kill(pid) {
+        try {
+            if (OS.isWindows()) {
+                //taskkill杀不存在的进程会有标准错误，从而引发异常
+                await Command.exec(`taskkill /f /t /pid ${pid}`);
+            } else {
+                //pkill杀不存在的进程会有标准错误，从而引发异常
+                await Command.sudoExec(`kill -9 ${pid}`);
+            }
+            // eslint-disable-next-line no-empty
+        } catch {
+
+        }
+    }
+
+    /**
+     *
      * @param name {string}
      * @returns {Promise<*>}
      */
     static async killByName(name) {
-        // eslint-disable-next-line no-empty
-        if (OS.isWindows()) {
-
-        } else {
-            try {
+        try {
+            if (OS.isWindows()) {
+                //taskkill杀不存在的进程会有标准错误，从而引发异常
+                await Command.exec(`taskkill /f /t /im ${name}`);
+            } else {
                 //pkill杀不存在的进程会有标准错误，从而引发异常
                 await Command.sudoExec(`pkill -9 ${name}`);
-                // eslint-disable-next-line no-empty
-            } catch {
-
             }
+            // eslint-disable-next-line no-empty
+        } catch {
 
         }
     }
@@ -26,6 +45,8 @@ export default class ProcessExtend {
     static async getList(searchObj={}) {
         if (OS.isMacOS()) {
             return await ProcessExtend.getListByMacOS(searchObj);
+        }else if(OS.isWindows()){
+            return await ProcessExtend.getListByWindows(searchObj);
         }
         return [];
     }
@@ -58,5 +79,34 @@ export default class ProcessExtend {
             return  [];
         }
 
+    }
+
+    static async getListByWindows(searchObj={}) {
+        let command = 'wmic process where ';
+        if (searchObj) {
+            if(searchObj.directory){
+                let formatDir =searchObj.directory.replaceAll('\\','\\\\');
+                command += `"ExecutablePath like '${formatDir}%'"`;
+            }
+        }
+        command += " get ProcessID, Name, ExecutablePath";
+
+        try {
+            let str =  await Command.exec(command);
+            str = str.trim();
+            if(!str){
+                return [];
+            }
+            let list = str.split('\n');
+            list = list.map(item => {
+                let arr = item.split(/\s+/);
+                let name, pid, path;
+                [path,name, pid] = arr;
+                return {name, pid, path};
+            });
+            return list;
+        }catch(e){
+            return  [];
+        }
     }
 }

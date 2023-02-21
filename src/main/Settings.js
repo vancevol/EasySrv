@@ -1,13 +1,14 @@
 import App from "@/main/App";
 import Store from "electron-store";
-import {MAC_USER_CORE_PATH, SETTINGS_FILE_NAME} from "@/main/constant";
+import {SETTINGS_FILE_NAME} from "@/main/constant";
 import Path from "@/main/utils/Path";
 import OS from "@/main/core/OS";
+import GetPath from "@/shared/utils/GetPath";
 
 export default class Settings {
-    static _instance;
-    static _fileName = SETTINGS_FILE_NAME;
-    static _fileExtension = 'json';
+    static #instance;
+    static #fileName = SETTINGS_FILE_NAME;
+    static #fileExtension = 'json';
 
     static get(key) {
         return Settings.getInstance().get(key);
@@ -22,21 +23,21 @@ export default class Settings {
      * @returns {ElectronStore<T>}
      */
     static getInstance() {
-        if (Settings._instance) {
-            return Settings._instance;
+        if (Settings.#instance) {
+            return Settings.#instance;
         }
         Settings.init();
-        return Settings._instance;
+        return Settings.#instance;
     }
 
     static init() {
         const options = {
-            name: Settings._fileName,
-            fileExtension: Settings._fileExtension,
+            name: Settings.#fileName,
+            fileExtension: Settings.#fileExtension,
             cwd: Settings.getFileDirPath(),
         };
         options.defaults = Settings.getDefault();
-        Settings._instance = new Store(options);
+        Settings.#instance = new Store(options);
     }
 
     /**
@@ -47,11 +48,19 @@ export default class Settings {
             EnableEnv: false,
             PhpVersion: '',
             EnableComposer: false,
+            TextEditor: this.getDefaultTextEditorPath(),
+            OneClickServerList: ['Nginx','PHP-FPM','MySQL-5.7']
         };
-        if (OS.isMacOS()) {
-            obj.TextEditor = Path.Join(MAC_USER_CORE_PATH, 'software/tool/NotepadNext.app');
-        }
         return obj;
+    }
+
+    static getDefaultTextEditorPath() {
+        let toolTypePath =  GetPath.getToolTypePath();
+        if (OS.isMacOS()) {
+           return Path.Join(toolTypePath, 'NotepadNext.app');
+        } else if (OS.isWindows()) {
+            return Path.Join(toolTypePath, 'Notepad3/Notepad3.exe');
+        }
     }
 
     static getFileDirPath(){
@@ -63,6 +72,6 @@ export default class Settings {
      * @returns {string}
      */
     static getFilePath(){
-        return Path.Join(Settings.getFileDirPath(), `${Settings._fileName}.${Settings._fileExtension}`);
+        return Path.Join(Settings.getFileDirPath(), `${Settings.#fileName}.${Settings.#fileExtension}`);
     }
 }

@@ -44,6 +44,7 @@ module.exports ={
               arch: ["x64"]
             },
           ],
+          requestedExecutionLevel: "requireAdministrator",
           extraFiles: {
             from: "./extra/win32/",
             to: "./",
@@ -52,6 +53,17 @@ module.exports ={
         },
         artifactName:'${productName}-${version}-${arch}.${ext}',
 
+      },
+      chainWebpackMainProcess: (config) => {
+        config.module
+            .rule('babel')
+            .test(/\.js$/)
+            .use('babel')
+            .loader('babel-loader')
+            .options({
+              presets: [['@babel/preset-env', { modules: false }]],
+              plugins: ['@babel/plugin-proposal-class-properties']
+            })
       }
     }
   }

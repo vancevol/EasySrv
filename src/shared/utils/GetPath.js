@@ -8,6 +8,10 @@ export default class GetPath {
         return path.join(App.getUserCorePath(), 'bin');
     }
 
+    static geTempPath(){
+        return path.join(App.getUserCorePath(), 'temp');
+    }
+
     static getSoftwarePath(){
         return path.join(App.getUserCorePath(), 'software');
     }
@@ -53,6 +57,9 @@ export default class GetPath {
     }
 
     static getPhpBinPath(version) {
+        if(OS.isWindows()){
+            return path.join(GetPath.getPhpPath(version), 'php.exe');
+        }
         return path.join(GetPath.getPhpPath(version), 'bin/php');
     }
 

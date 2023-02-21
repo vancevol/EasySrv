@@ -4,6 +4,7 @@ import NginxWebsite from "@/main/core/website/NginxWebsite";
 import Directory from "@/main/utils/Directory";
 import File from "@/main/utils/File";
 import Path from "@/main/utils/Path";
+import OS from "@/main/core/OS";
 
 export default class Nginx {
     /**
@@ -90,6 +91,10 @@ export default class Nginx {
     access_log  logs/${websiteInfo.serverName}.access.log;
     error_log  logs/${websiteInfo.serverName}.error.log;
 }`;
+
+        if (OS.isWindows()) {
+            confText = confText.replaceAll("\n", "\r\n");
+        }
 
         let confPath = Nginx.getWebsiteConfPath(websiteInfo.serverName);
         File.WriteAllText(confPath, confText);

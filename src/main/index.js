@@ -6,6 +6,7 @@ import { createProtocol } from 'vue-cli-plugin-electron-builder/lib'
 import installExtension, { VUEJS3_DEVTOOLS } from 'electron-devtools-installer'
 import Store from "electron-store"
 import TrayManager from "@/main/TrayManager";
+import MainWindow from "@/main/MainWindow";
 
 const isDevelopment = process.env.NODE_ENV !== 'production'
 
@@ -14,14 +15,22 @@ protocol.registerSchemesAsPrivileged([
   { scheme: 'app', privileges: { secure: true, standard: true } }
 ])
 
- let window;
+ let mainWindow;
 
-remoteMain.initialize();
-Store.initRenderer();
+const gotTheLock = app.requestSingleInstanceLock()
+
+if (!gotTheLock) {
+    app.quit()
+} else {
+    onReady();
+    onRunning();
+    remoteMain.initialize();
+    Store.initRenderer();
+}
 
 async function createWindow() {
   // Create the browser window.
-    window = new BrowserWindow({
+    mainWindow = new BrowserWindow({
     width: isDevelopment ? 1280 : 880,
     height: 650,
     minWidth: 880,
@@ -38,16 +47,16 @@ async function createWindow() {
     }
   })
 
-  remoteMain.enable(window.webContents);
+  remoteMain.enable(mainWindow.webContents);
 
   if (process.env.WEBPACK_DEV_SERVER_URL) {
     // Load the url of the dev server if in development mode
-    await window.loadURL(process.env.WEBPACK_DEV_SERVER_URL)
-    if (!process.env.IS_TEST) window.webContents.openDevTools()
+    await mainWindow.loadURL(process.env.WEBPACK_DEV_SERVER_URL)
+    if (!process.env.IS_TEST) mainWindow.webContents.openDevTools()
   } else {
     createProtocol('app')
     // Load the index.html when not in development
-      window.loadURL('app://./index.html')
+      mainWindow.loadURL('app://./index.html')
   }
 }
 
@@ -60,35 +69,36 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('activate', () => {
-  // On macOS it's common to re-create a window in the app when the
-  // dock icon is clicked and there are no other windows open.
-  if (BrowserWindow.getAllWindows().length === 0) createWindow()
-})
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.on('ready', async () => {
-  if (isDevelopment && !process.env.IS_TEST) {
-    // Install Vue Devtools
-    try {
-      await installExtension(VUEJS3_DEVTOOLS)
-    } catch (e) {
-      console.error('Vue Devtools failed to install:', e.toString())
-    }
-  }
-  createWindow();
+function onReady(){
+    app.on('ready', async () => {
+        if (isDevelopment && !process.env.IS_TEST) {
+            // Install Vue Devtools
+            try {
+                await installExtension(VUEJS3_DEVTOOLS)
+            } catch (e) {
+                console.error('Vue Devtools failed to install:', e.toString())
+            }
+        }
+        createWindow();
 
-  // window.on('close', (event) => {
-  //   event.preventDefault();
-  //   window.hide();
-  //   });
+        TrayManager.init(mainWindow);
+        MainWindow.init(mainWindow)
+    })
+}
 
-  TrayManager.init(window);
-})
-
-
+function onRunning() {
+    app.on("second-instance", () => {
+        // 当运行第二个实例时,将会聚焦到mainWindow这个窗口
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) mainWindow.restore()
+            mainWindow.focus()
+        }
+    });
+    app.on("activate", () => {
+        if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    });
+}
 
 // Exit cleanly on request from parent process in development mode.
 if (isDevelopment) {

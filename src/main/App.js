@@ -11,11 +11,16 @@ import child_process from "child_process";
 import GetPath from "@/shared/utils/GetPath";
 import OS from "@/main/core/OS";
 import Settings from "@/main/Settings";
+import SoftwareInit from "@/main/core/software/SoftwareInit";
 
 
 export default class App {
     static isDev() {
         return !app.isPackaged;
+    }
+
+    static getPath() {
+        return Path.GetDirectoryName(this.getExePath());
     }
 
     /**
@@ -32,7 +37,7 @@ export default class App {
      */
     static getContentsPath() {
         if (OS.isMacOS()) {
-            return Path.Join(Path.GetDirectoryName(App.getExePath()), '..');
+            return Path.Join(this.getPath(), '..');
         }
         return '';
     }
@@ -66,7 +71,7 @@ export default class App {
             if (App.isDev()) {
                 result = path.join(App.getPlatformPath(), WIN_CORE_PATH_NAME)
             } else {
-                result = path.join(App.getAppPath(), WIN_CORE_PATH_NAME)
+                result = path.join(App.getPath(), WIN_CORE_PATH_NAME)
             }
         } else if (OS.isMacOS()) {
             if (App.isDev()) {
@@ -117,8 +122,10 @@ export default class App {
             }
             App.moveCoreSubDir(['tmp', 'www', 'software']);
             App.updateCoreSubDir(['Library']);
-            App.createCoreSubDir(['downloads', 'database', 'bin']);
         }
+        App.createCoreSubDir(['downloads', 'database', 'bin']);
+
+        await SoftwareInit.initAll();
         await App.initMySQL();
         Settings.init();
         File.Delete(initFile);
@@ -177,7 +184,7 @@ export default class App {
      */
     static createCoreSubDir(dirs) {
         for (const dir of dirs) {
-            let p = path.join(MAC_USER_CORE_PATH, dir);
+            let p = path.join(this.getUserCorePath(), dir);
             if (!Directory.Exists(p)) {
                 Directory.CreateDirectory(p);
             }

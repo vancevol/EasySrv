@@ -1,6 +1,5 @@
 import App from "@/main/App";
 import path from "path";
-import {enumGetName} from "@/shared/utils/utils";
 import {EnumSoftwareType} from "@/shared/enum";
 import GetPath from "@/shared/utils/GetPath";
 import Directory from "@/main/utils/Directory";
@@ -8,15 +7,15 @@ import File from "@/main/utils/File";
 
 export default class Software {
 
-    static list;
+    static #list;
 
     /**
      *
      * @returns {[]}
      */
     static getList() {
-        if(Software.list){
-            return Software.list;
+        if(Software.#list){
+            return Software.#list;
         }
         let corePath = App.getCorePath();
         let softPath = path.join(corePath, '/config/software');
@@ -28,7 +27,7 @@ export default class Software {
         for (const item of list) {
             item.Icon = path.join(softIconPath, item.Icon);
         }
-        Software.list = list;
+        Software.#list = list;
         return list;
     }
 
@@ -53,14 +52,26 @@ export default class Software {
     }
 
     /**
+     * 获取软件配置文件所在的目录
+     * @param item {SoftwareItem}
+     * @returns {string}
+     */
+    static getConfPath(item) {
+        if (item.ConfPath == null) {
+            throw new Error(`${item.Name} Conf Path 没有配置！`);
+        }
+        let softPath = Software.getPath(item);
+        return path.join(softPath, item.ConfPath);
+    }
+
+    /**
      * 获取软件服务配置文件所在的目录
      * @param item {SoftwareItem}
      * @returns {string}
      */
     static getServerConfPath(item) {
-        let serverTypeName = enumGetName(EnumSoftwareType,EnumSoftwareType.Server);
-        if (item.Type !== serverTypeName || !item.ServerConfPath) {
-            return null;
+        if (item.ServerConfPath == null) {
+            throw new Error(`${item.Name} Server Conf Path 没有配置！`);
         }
         let softPath = Software.getPath(item);
         return path.join(softPath, item.ServerConfPath);
@@ -72,10 +83,25 @@ export default class Software {
      * @returns {string}
      */
     static getServerProcessPath(item) {
+        if (item.ServerProcessPath == null) {
+            throw new Error(`${item.Name} Server Process Path 没有配置！`);
+        }
         let workPath = Software.getPath(item); //服务目录
         return path.join(workPath, item.ServerProcessPath);  //服务的进程目录
     }
 
+    /**
+     * 获取软件服务pid绝对路径
+     * @param item {SoftwareItem}
+     * @returns {string}
+     */
+    static getServerPidPath(item) {
+        if (item.ServerPidPath == null) {
+            throw new Error(`${item.Name} Server Pid Path 没有配置！`);
+        }
+        let workPath = Software.getPath(item); //服务目录
+        return path.join(workPath, item.ServerPidPath);  //服务的进程目录
+    }
 
     /**
      * 根据软件类型，获取软件的类型目录
