@@ -1,6 +1,7 @@
 export default class MainWindow {
 
     static #instance;
+    static forceQuit = false;
 
     /**
      *
@@ -9,9 +10,16 @@ export default class MainWindow {
     static init(mainWindow) {
         MainWindow.#instance = mainWindow;
         mainWindow.on('close', (event) => {
-            event.preventDefault();
-            mainWindow.minimize();
-            mainWindow.setSkipTaskbar(true);
+            if (!this.forceQuit) {
+                event.preventDefault();
+                if (mainWindow.isFullScreen()) {
+                    mainWindow.once('leave-full-screen', () => mainWindow.hide())
+
+                    mainWindow.setFullScreen(false)
+                } else {
+                    mainWindow.hide()
+                }
+            }
         })
     }
 
