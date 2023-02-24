@@ -17,12 +17,16 @@
 </template>
 
 <script setup>
-import {defineProps, computed, defineEmits, ref} from "vue";
+import {defineProps, computed, defineEmits, ref, inject} from "vue";
 import Settings from "@/main/Settings";
 import {message} from 'ant-design-vue';
 import App from "@/main/App";
 import SystemExtend from "@/main/core/SystemExtend";
+import MessageBox from "@/renderer/utils/MessageBox";
+import {useMainStore} from "@/renderer/store";
+const mainStore = useMainStore();
 
+const globalSpinning = inject('globalSpinning');
 
 const props =  defineProps({
   show:Boolean,
@@ -64,6 +68,16 @@ const saveUserPwd = async () => {
   rightPwd.value = userPwd.value;
   Settings.set('userPwd', userPwd.value);
   visible.value = false;
+  if (App.initFileExists()) {
+    try {
+      globalSpinning.value = true;
+      await App.init();
+      mainStore.$reset();
+      globalSpinning.value = false;
+    } catch (error) {
+      MessageBox.error(error.message ?? error, '软件初始化出错！');
+    }
+  }
 }
 
 const cancel = () => {

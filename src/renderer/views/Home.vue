@@ -35,11 +35,7 @@
             <right-square-filled style="color: #20a53a;" v-show="record.isRunning"/>
           </div>
         </template>
-        <template v-if="column.dataIndex === 'service'">
-          <div>
-            <a-switch @click="serviceChange" />
-          </div>
-        </template>
+
         <template v-if="column.dataIndex === 'operate'">
           <div class="operate-td">
             <a-button type="primary" @click="startServerClick(record)" v-show="!record.isRunning"
@@ -84,15 +80,13 @@
       </template>
     </a-table>
   </div>
-  <user-pwd-modal v-model:show="userPwdModalShow" :cancel-is-exit="true" />
 </template>
 
 <script setup>
 // eslint-disable-next-line no-unused-vars
-import {inject, ref, watch} from 'vue';
+import {computed, inject, ref, watch} from 'vue';
 import {useMainStore} from '@/renderer/store'
 import {DownOutlined, RightSquareFilled,PoweroffOutlined,ReloadOutlined} from '@ant-design/icons-vue';
-import { message } from 'ant-design-vue';
 import App from "@/main/App";
 import GetPath from "@/shared/utils/GetPath";
 import Software from "@/main/core/software/Software";
@@ -104,18 +98,10 @@ import Native from "@/renderer/utils/Native";
 //import {sleep} from "@/shared/utils/utils";
 import Path from "@/main/utils/Path";
 import ProcessExtend from "@/main/core/ProcessExtend";
-import UserPwdModal from "@/renderer/components/UserPwdModal";
-import SettingsExtend from "@/main/core/SettingsExtend";
-import OS from "@/main/core/OS";
 import Settings from "@/main/Settings";
 import SoftwareExtend from "@/main/core/software/SoftwareExtend";
+import {sleep} from "@/shared/utils/utils";
 
-const userPwdModalShow = ref(false);
-if(OS.isMacOS()){
-  if (!SettingsExtend.isUserPwdSet()) {
-    userPwdModalShow.value = true;
-  }
-}
 
 const serverTableLoading = ref(false);
 const globalSpinning = inject('globalSpinning')
@@ -140,26 +126,31 @@ const columns = [
 const mainStore = useMainStore();
 const {serverSoftwareList} = storeToRefs(mainStore);
 
-let serverList = serverSoftwareList.value.filter(item => Software.IsInstalled(item));
+const serverList = computed(() => serverSoftwareList.value.filter(item => Software.IsInstalled(item)));
 
-const refreshServerStatus = async () => {
-  serverTableLoading.value = true;
-  let processList = await ProcessExtend.getList({directory: GetPath.getSoftwarePath()});
-  let pathList = processList.map(item => item.path);
-  for (const item of serverList) {
-    let serverProcessPath = Software.getServerProcessPath(item);
-    item.isRunning = pathList.includes(serverProcessPath);
+
+const initServerListStatus = async () => {
+  const promiseStopServer = async (item) => {
+    try {
+      item.pid = item.pid ? item.pid : ServerControl.getPidByFile(item);
+      item.isRunning = ProcessExtend.pidIsRunning(item.pid);
+    } catch (error) {
+      MessageBox.error(error.message ?? error, '获取服务状态出错！');
+    }
   }
-  serverTableLoading.value = false;
+
+  const promiseArray = serverList.value.map(item => promiseStopServer(item));
+  await Promise.all(promiseArray);
 };
 
-if (!globalSpinning.value) {
-  refreshServerStatus();
-}
+(async () => {
+  if (!globalSpinning.value) {
+    serverTableLoading.value = true;
+    await initServerListStatus();
+    serverTableLoading.value = false;
+  }
+})()
 
-const serviceChange = ()=>{
-  message.info('下个版本开放！！！');
-}
 
 const corePathClick = ()=>{
   Native.openPath(App.getUserCorePath());
@@ -194,7 +185,7 @@ const oneClickStart = async () => {
   //oneClickServerIncludePhpFpm 基本上默认为true
   const oneClickServerIncludePhpFpm = oneClickServerList.value.includes('PHP-FPM');
   const requirePhpList = await getNginxRequirePhpList();
-  serverList.forEach(async (item) => {
+  serverList.value.forEach(async (item) => {
     if (oneClickServerList.value.includes(item.Name)) {
       startServerClick(item);
     } else if (item.Name.match(/^PHP-[.\d]+$/) && requirePhpList.includes(item.Name) && oneClickServerIncludePhpFpm) {
@@ -208,7 +199,8 @@ const oneClickStop = async () => {
   //oneClickServerIncludePhpFpm 基本上默认为true
   const oneClickServerIncludePhpFpm = oneClickServerList.value.includes('PHP-FPM');
   const requirePhpList = await getNginxRequirePhpList();
-  serverList.forEach(async (item) => {
+
+  serverList.value.forEach(async (item) => {
     if (oneClickServerList.value.includes(item.Name)) {
       stopServerClick(item);
     } else if (item.Name.match(/^PHP-[.\d]+$/) && requirePhpList.includes(item.Name) && oneClickServerIncludePhpFpm) {
@@ -245,9 +237,19 @@ const restartServerClick = async (item) => {
   item.btnLoading = true;
   try {
     await ServerControl.stop(item);
+
+    for (let i = 0; i < 10; i++) {
+      if (item.isRunning === false) {
+        break;
+      }
+      await sleep(500);
+      item.isRunning = ProcessExtend.pidIsRunning(item.pid);
+    }
+
     if (item.isRunning) {
       throw new Error('服务没有成功停止！');
     }
+
     await ServerControl.start(item);
   } catch (error) {
     MessageBox.error(error.message ?? error, '重启服务出错！');
@@ -262,8 +264,13 @@ const stopServerClick = async (item) => {
   item.btnLoading = true;
   try {
     await ServerControl.stop(item);
-    if (item.isRunning) {
-      await refreshServerStatus();
+
+    for (let i = 0; i < 10; i++) {
+      if (item.isRunning === false) {
+        break;
+      }
+      await sleep(500);
+      item.isRunning = ProcessExtend.pidIsRunning(item.pid);
     }
   } catch (error) {
     MessageBox.error(error.message ?? error, '停止服务出错！');

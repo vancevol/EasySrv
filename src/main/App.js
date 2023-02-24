@@ -111,11 +111,18 @@ export default class App {
     }
 
     static async init() {
+        if (this.getPath().includes(' ')) {
+            throw new Error('安装路径不能包含空格！');
+        }
+
         let initFile = App.getInitFilePath();
 
         if (!File.Exists(initFile)) {
             return;
         }
+
+        Settings.init();
+
         if (OS.isMacOS() && !App.isDev()) {
             if (!Directory.Exists(MAC_USER_CORE_PATH)) {
                 Directory.CreateDirectory(MAC_USER_CORE_PATH);
@@ -127,7 +134,7 @@ export default class App {
 
         await SoftwareInit.initAll();
         await App.initMySQL();
-        Settings.init();
+
         File.Delete(initFile);
     }
 
